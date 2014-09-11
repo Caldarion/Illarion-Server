@@ -24,11 +24,11 @@
 #include <iostream>
 #include "Logger.hpp"
 
-LuaReloadScript::LuaReloadScript(const std::string &filename) throw(ScriptException)
+LuaReloadScript::LuaReloadScript(const std::string &filename)
     : LuaScript(filename) {
 }
 
-LuaReloadScript::~LuaReloadScript() throw() {}
+LuaReloadScript::~LuaReloadScript() {}
 
 void LuaReloadScript::onReload() {
     callEntrypoint("onReload");

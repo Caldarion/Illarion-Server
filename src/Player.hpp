@@ -20,6 +20,7 @@
 #ifndef _PLAYER_HPP_
 #define _PLAYER_HPP_
 
+#include <chrono>
 #include <memory>
 #include <string>
 #include <set>
@@ -137,6 +138,8 @@ public:
 
     //! Zeitpunkt der letzten Aktion des Spielers
     time_t lastaction;
+
+    std::chrono::time_point<std::chrono::steady_clock> reachingTargetField = {};
 
     //! Location
     std::string location;
@@ -272,25 +275,25 @@ public:
     virtual void sendCharDescription(TYPE_OF_CHARACTER_ID id,const std::string &desc) override;
 
     //! normal constructor
-    Player(std::shared_ptr<NetInterface> newConnection) throw(LogoutException);
+    Player(std::shared_ptr<NetInterface> newConnection);
 
     //! check if username/password is ok
-    void check_logindata() throw(LogoutException);
+    void check_logindata();
 
     //Checks if a Player has a special GM right
     bool hasGMRight(gm_rights right) const;
 
     //! save char to db
-    bool save() throw();
+    bool save() noexcept;
 
     //! load data from db
     // \param no_attributes don't load contents of table "player"
-    bool load() throw();
+    bool load() noexcept;
 
-    void login() throw(LogoutException);
+    void login();
 
     //Loads the GM Flag of the character
-    bool loadGMFlags() throw();
+    bool loadGMFlags() noexcept;
 
     /**
     * sends one area relative to the current z coordinate to the player

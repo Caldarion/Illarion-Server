@@ -26,17 +26,17 @@ LuaItemScript::LuaItemScript() : LuaScript() {
     init_functions();
 }
 
-LuaItemScript::LuaItemScript(const std::string &filename, const CommonStruct &comstr) throw(ScriptException)
+LuaItemScript::LuaItemScript(const std::string &filename, const CommonStruct &comstr)
     : LuaScript(filename) , _comstr(comstr) {
     init_functions();
 }
 
-LuaItemScript::LuaItemScript(const std::string &code, const std::string &codename, const CommonStruct &comstr) throw(ScriptException)
+LuaItemScript::LuaItemScript(const std::string &code, const std::string &codename, const CommonStruct &comstr)
     : LuaScript(code, codename), _comstr(comstr) {
     init_functions();
 }
 
-LuaItemScript::~LuaItemScript() throw() {}
+LuaItemScript::~LuaItemScript() {}
 
 void LuaItemScript::init_functions() {
     luabind::object globals = luabind::globals(_luaState);

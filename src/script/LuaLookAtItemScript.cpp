@@ -23,11 +23,11 @@
 #include "Item.hpp"
 #include "character_ptr.hpp"
 
-LuaLookAtItemScript::LuaLookAtItemScript(const std::string &filename) throw(ScriptException)
+LuaLookAtItemScript::LuaLookAtItemScript(const std::string &filename)
     : LuaScript(filename) {
 }
 
-LuaLookAtItemScript::~LuaLookAtItemScript() throw() {}
+LuaLookAtItemScript::~LuaLookAtItemScript() {}
 
 ItemLookAt LuaLookAtItemScript::lookAtItem(Character *character, const ScriptItem &item) {
     character_ptr fuse_character(character);

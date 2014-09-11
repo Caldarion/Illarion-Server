@@ -22,15 +22,15 @@
 #include "Character.hpp"
 #include "character_ptr.hpp"
 
-LuaWeaponScript::LuaWeaponScript(const std::string &filename) throw(ScriptException)
+LuaWeaponScript::LuaWeaponScript(const std::string &filename)
     : LuaScript(filename) {
 }
 
-LuaWeaponScript::LuaWeaponScript(const std::string &filename, const WeaponStruct &weapon) throw(ScriptException)
+LuaWeaponScript::LuaWeaponScript(const std::string &filename, const WeaponStruct &weapon)
     : LuaScript(filename) {
 }
 
-LuaWeaponScript::~LuaWeaponScript() throw() {}
+LuaWeaponScript::~LuaWeaponScript() {}
 
 void LuaWeaponScript::onAttack(Character *Attacker, Character *Defender) {
     character_ptr fuse_Attacker(Attacker);

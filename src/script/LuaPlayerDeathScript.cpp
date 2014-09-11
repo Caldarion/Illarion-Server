@@ -22,11 +22,11 @@
 #include "Character.hpp"
 #include "character_ptr.hpp"
 
-LuaPlayerDeathScript::LuaPlayerDeathScript(const std::string &filename) throw(ScriptException)
+LuaPlayerDeathScript::LuaPlayerDeathScript(const std::string &filename)
     : LuaScript(filename) {
 }
 
-LuaPlayerDeathScript::~LuaPlayerDeathScript() throw() {}
+LuaPlayerDeathScript::~LuaPlayerDeathScript() {}
 
 void LuaPlayerDeathScript::playerDeath(Character *deadPlayer) {
     character_ptr fuse_deadPlayer(deadPlayer);

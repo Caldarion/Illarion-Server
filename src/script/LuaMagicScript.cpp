@@ -23,12 +23,12 @@
 #include "Item.hpp"
 #include "character_ptr.hpp"
 
-LuaMagicScript::LuaMagicScript(const std::string &filename, const SpellStruct &) throw(ScriptException)
+LuaMagicScript::LuaMagicScript(const std::string &filename, const SpellStruct &)
     : LuaScript(filename) {
     init_functions();
 }
 
-LuaMagicScript::~LuaMagicScript() throw() {}
+LuaMagicScript::~LuaMagicScript() {}
 
 void LuaMagicScript::init_functions() {
     luabind::object globals = luabind::globals(_luaState);

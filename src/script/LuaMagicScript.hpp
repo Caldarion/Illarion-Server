@@ -30,8 +30,8 @@ class Character;
 class LuaMagicScript : public LuaScript {
 
 public:
-    LuaMagicScript(const std::string &filename, const SpellStruct &) throw(ScriptException);
-    virtual ~LuaMagicScript() throw();
+    LuaMagicScript(const std::string &filename, const SpellStruct &);
+    virtual ~LuaMagicScript();
 
     void CastMagic(Character *caster, unsigned char ltastate);
     void CastMagicOnItem(Character *caster, const ScriptItem &TargetItem, unsigned char ltastate);

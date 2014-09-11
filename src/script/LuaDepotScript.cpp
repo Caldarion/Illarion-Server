@@ -23,11 +23,11 @@
 #include "Item.hpp"
 #include "character_ptr.hpp"
 
-LuaDepotScript::LuaDepotScript(const std::string &filename) throw(ScriptException)
+LuaDepotScript::LuaDepotScript(const std::string &filename)
     : LuaScript(filename) {
 }
 
-LuaDepotScript::~LuaDepotScript() throw() {}
+LuaDepotScript::~LuaDepotScript() {}
 
 bool LuaDepotScript::onOpenDepot(Character *cc, const ScriptItem &itm) {
     character_ptr fuse_cc(cc);

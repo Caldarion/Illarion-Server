@@ -22,11 +22,11 @@
 #include "Character.hpp"
 #include "character_ptr.hpp"
 
-LuaQuestScript::LuaQuestScript(const std::string &filename, TYPE_OF_QUEST_ID quest) throw(ScriptException)
+LuaQuestScript::LuaQuestScript(const std::string &filename, TYPE_OF_QUEST_ID quest)
     : LuaScript(filename), quest(quest) {
 }
 
-LuaQuestScript::~LuaQuestScript() throw() {}
+LuaQuestScript::~LuaQuestScript() {}
 
 std::string LuaQuestScript::title(Character *user) {
     character_ptr fuse_user(user);

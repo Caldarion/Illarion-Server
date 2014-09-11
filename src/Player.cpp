@@ -69,7 +69,7 @@
 extern std::shared_ptr<LuaPlayerDeathScript>playerDeathScript;
 extern std::shared_ptr<LuaDepotScript>depotScript;
 
-Player::Player(std::shared_ptr<NetInterface> newConnection) throw(Player::LogoutException)
+Player::Player(std::shared_ptr<NetInterface> newConnection)
     : Character(), onlinetime(0), Connection(newConnection), turtleActive(false),
       clippingActive(true), admin(false), questWriteLock(false), monitoringClient(false), dialogCounter(0) {
     screenwidth = 0;
@@ -124,7 +124,7 @@ Player::Player(std::shared_ptr<NetInterface> newConnection) throw(Player::Logout
     }
 }
 
-void Player::login() throw(Player::LogoutException) {
+void Player::login() {
     position pos = getPosition();
     
     try {
@@ -872,7 +872,7 @@ bool Player::isAdmin() const {
 }
 
 
-void Player::check_logindata() throw(Player::LogoutException) {
+void Player::check_logindata() {
     Database::PConnection connection = Database::ConnectionManager::getInstance().getConnection();
 
     try {
@@ -1089,7 +1089,7 @@ struct container_struct {
 }
 ;
 
-bool Player::save() throw() {
+bool Player::save() noexcept {
     using namespace Database;
 
     Logger::info(LogFacility::Player) << "Saving " << to_string() << Log::end;
@@ -1357,7 +1357,7 @@ bool Player::save() throw() {
     }
 }
 
-bool Player::loadGMFlags() throw() {
+bool Player::loadGMFlags() noexcept {
     try {
         using namespace Database;
         SelectQuery query;
@@ -1382,7 +1382,7 @@ bool Player::loadGMFlags() throw() {
     return false;
 }
 
-bool Player::load() throw() {
+bool Player::load() noexcept {
     std::map<int, Container *> depots, containers;
     std::map<int, Container *>::iterator it;
 
@@ -1844,6 +1844,19 @@ bool Player::moveToPossible(const Field &field) const {
 }
 
 bool Player::move(direction dir, uint8_t mode) {
+    using std::chrono::steady_clock;
+    using std::chrono::milliseconds;
+    auto now = steady_clock::now();
+
+    if (now + milliseconds(800) < reachingTargetField) {
+        auto cmd =
+            std::make_shared<MoveAckTC>(getId(), getPosition(), STILLMOVING, 0);
+        Connection->addCommand(cmd);
+        return false;
+    } else if (now > reachingTargetField) {
+        reachingTargetField = now;
+    }
+
     _world->TriggerFieldMove(this, false);
     closeOnMove();
 
@@ -1907,6 +1920,7 @@ bool Player::move(direction dir, uint8_t mode) {
                     cont = false;
                 } else {
                     if (mode != RUNNING || (j == 1 && cont)) {
+                        reachingTargetField += milliseconds(walkcost);
                         ServerCommandPointer cmd = std::make_shared<MoveAckTC>(getId(), newpos, mode, walkcost);
                         Connection->addCommand(cmd);
                     }
@@ -1948,6 +1962,7 @@ bool Player::move(direction dir, uint8_t mode) {
             }
         } catch (FieldNotFound &) {
             if (j == 1) {
+                reachingTargetField += milliseconds(walkcost);
                 ServerCommandPointer cmd = std::make_shared<MoveAckTC>(getId(), getPosition(), NORMALMOVE, walkcost);
                 Connection->addCommand(cmd);
                 sendStepStripes(dir);

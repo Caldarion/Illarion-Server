@@ -28,8 +28,8 @@ class Character;
 
 class LuaLearnScript : public LuaScript {
 public:
-    LuaLearnScript(const std::string &filename) throw(ScriptException);
-    virtual ~LuaLearnScript() throw();
+    LuaLearnScript(const std::string &filename);
+    virtual ~LuaLearnScript();
 
     void learn(Character *cc, TYPE_OF_SKILL_ID skill, uint32_t actionPoints, uint8_t opponent);
     void reduceMC(Character *cc);

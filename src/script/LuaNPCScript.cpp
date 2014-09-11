@@ -22,11 +22,11 @@
 #include "NPC.hpp"
 #include "character_ptr.hpp"
 
-LuaNPCScript::LuaNPCScript(const std::string &filename, NPC *thisnpc) throw(ScriptException)
+LuaNPCScript::LuaNPCScript(const std::string &filename, NPC *thisnpc)
     : LuaScript(filename), _thisnpc(thisnpc) {
 }
 
-LuaNPCScript::~LuaNPCScript() throw() {}
+LuaNPCScript::~LuaNPCScript() {}
 
 void LuaNPCScript::nextCycle() {
     character_ptr fuse_thisnpc(_thisnpc);

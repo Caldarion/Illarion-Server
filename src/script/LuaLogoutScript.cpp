@@ -22,11 +22,11 @@
 #include "Character.hpp"
 #include "character_ptr.hpp"
 
-LuaLogoutScript::LuaLogoutScript(const std::string &filename) throw(ScriptException)
+LuaLogoutScript::LuaLogoutScript(const std::string &filename)
     : LuaScript(filename) {
 }
 
-LuaLogoutScript::~LuaLogoutScript() throw() {}
+LuaLogoutScript::~LuaLogoutScript() {}
 
 void LuaLogoutScript::onLogout(Character *cc) {
     character_ptr fuse_cc(cc);

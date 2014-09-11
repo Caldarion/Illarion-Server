@@ -22,11 +22,11 @@
 #include "Character.hpp"
 #include "character_ptr.hpp"
 
-LuaLookAtPlayerScript::LuaLookAtPlayerScript(const std::string &filename) throw(ScriptException)
+LuaLookAtPlayerScript::LuaLookAtPlayerScript(const std::string &filename)
     : LuaScript(filename) {
 }
 
-LuaLookAtPlayerScript::~LuaLookAtPlayerScript() throw() {}
+LuaLookAtPlayerScript::~LuaLookAtPlayerScript() {}
 
 void LuaLookAtPlayerScript::lookAtPlayer(Character *source, Character *target, unsigned char mode) {
     character_ptr fuse_source(source);

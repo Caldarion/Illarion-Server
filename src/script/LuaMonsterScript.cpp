@@ -24,15 +24,15 @@
 #include "Character.hpp"
 #include "character_ptr.hpp"
 
-LuaMonsterScript::LuaMonsterScript() throw(ScriptException)
+LuaMonsterScript::LuaMonsterScript()
     : LuaScript() {
 }
 
-LuaMonsterScript::LuaMonsterScript(const std::string &filename) throw(ScriptException)
+LuaMonsterScript::LuaMonsterScript(const std::string &filename)
     : LuaScript(filename) {
 }
 
-LuaMonsterScript::~LuaMonsterScript() throw() {}
+LuaMonsterScript::~LuaMonsterScript() {}
 
 void LuaMonsterScript::onDeath(Character *Monster) {
     character_ptr fuse_Monster(Monster);

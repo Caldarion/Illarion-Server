@@ -19,10 +19,13 @@
 
 # Process this file with autoconf to produce a configure script.
 AC_PREREQ(2.50)
-AC_INIT(Illarion Server, 0.9, http://illarion.org)
+AC_INIT(Illarion Server, 0.9.2.1, http://mantis.illarion.org, illarion, http://illarion.org)
 AC_CONFIG_MACRO_DIR([m4])
 AM_INIT_AUTOMAKE([-Wno-portability foreign 1.11])
 AC_CONFIG_HEADERS(config.h)
+
+# Reduce verbosity
+AM_SILENT_RULES([yes])
 
 # Checks for programs.
 AC_PROG_CXX(g++)
@@ -45,14 +48,14 @@ AC_STRUCT_TM
 AC_CHECK_FUNCS([bzero ftime gethostbyname inet_ntoa memset select socket strerror strtol strtoul])
 
 BOOST_REQUIRE([1.49])
-BOOST_THREADS
 BOOST_FILESYSTEM
 BOOST_SYSTEM
 BOOST_REGEX
 BOOST_GRAPH
 
-PKG_CHECK_MODULES([lua], [lua5.1])
+PKG_CHECK_MODULES([lua], [lua5.2])
 PKG_CHECK_MODULES([libpqxx], [libpqxx >= 3.1])
+PKG_CHECK_MODULES([luabind], [luabind >= 0.9.1])
 
 AC_CONFIG_LINKS([test/maps/test.tiles.txt:test/maps/test.tiles.txt
        test/maps/test.items.txt:test/maps/test.items.txt
@@ -60,17 +63,9 @@ AC_CONFIG_LINKS([test/maps/test.tiles.txt:test/maps/test.tiles.txt
 ])
 
 AC_LANG(C++)
-SAVED_LDFLAGS=$LDFLAGS
-LDFLAGS="$LDFLAGS -lluabind"
-AC_LINK_IFELSE(
-  [AC_LANG_PROGRAM([#include <luabind/error.hpp>],
-    [luabind::error *foo])],
-  [TEST_LIBS="$TEST_LIBS -lluabind"] [HAVE_LUABIND=1],
-  [AC_MSG_ERROR([luabind is not installed.])])
-LDFLAGS=$SAVED_LDFLAGS
 
 DEPS_CFLAGS="$lua_CFLAGS $libpqxx_CFLAGS"
-DEPS_LIBS="$lua_LIBS $libpqxx_LIBS -lluabind"
+DEPS_LIBS="$lua_LIBS $libpqxx_LIBS $luabind_LIBS"
 
 ac_gtest_dir="/usr/src/gtest"
 ac_gmock_dir="/usr/src/gmock"
