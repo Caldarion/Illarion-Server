@@ -87,7 +87,7 @@ public:
     }
 
     static lua_State *getLuaState() {
-        return _luaState;
+        return L;
     }
 
     static void shutdownLua();
@@ -140,7 +140,7 @@ public:
     static void writeDebugMsg(const std::string &msg);
 
 protected:
-    static lua_State *_luaState;
+    static lua_State *L;
     static bool initialized;
 
     template<typename... Args>
@@ -161,6 +161,8 @@ protected:
 private:
     void initialize();
     void loadIntoLuaState();
+    void handleLuaLoadError(int errorCode);
+    void handleLuaCallError(int errorCode);
     static void init_base_functions();
     static int add_backtrace(lua_State *L);
     void writeErrorMsg();
@@ -209,7 +211,6 @@ private:
     LuaScript &operator=(const LuaScript &);
 
     std::string _filename;
-    std::vector<std::string> vecPath;
     char luafile[200];
     typedef std::multimap<const std::string, std::shared_ptr<LuaScript> > QuestScripts;
     QuestScripts questScripts;

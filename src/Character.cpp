@@ -36,6 +36,7 @@
 #include "LongTimeAction.hpp"
 
 #include "data/Data.hpp"
+#include "data/RaceTypeTable.hpp"
 #include "data/TilesTable.hpp"
 
 #include "script/LuaWeaponScript.hpp"
@@ -48,6 +49,7 @@
 
 extern std::shared_ptr<LuaLearnScript>learnScript;
 extern std::shared_ptr<LuaWeaponScript> standardFightingScript;
+extern std::unique_ptr<RaceTypeTable> raceTypes;
 
 Character::attribute_map_t Character::attributeMap = {
     {"strength", strength},
@@ -714,39 +716,38 @@ unsigned short int Character::getMinorSkill(TYPE_OF_SKILL_ID s) const {
 }
 
 
-void Character::setSkinColor(uint8_t red, uint8_t green, uint8_t blue) {
-    _appearance.skin.red = red;
-    _appearance.skin.green = green;
-    _appearance.skin.blue = blue;
+void Character::setSkinColour(const Colour &c) {
+    _appearance.skin = c;
     updateAppearanceForAll(true);
 }
 
 
-void Character::getSkinColor(uint8_t &red, uint8_t &green, uint8_t &blue) const {
-    red = _appearance.skin.red;
-    green =_appearance.skin.green;
-    blue = _appearance.skin.blue;
+Colour Character::getSkinColour() const {
+    return _appearance.skin;
 }
 
 
-void Character::setHairColor(uint8_t red, uint8_t green, uint8_t blue) {
-    _appearance.hair.red = red;
-    _appearance.hair.green = green;
-    _appearance.hair.blue = blue;
+void Character::setHairColour(const Colour &c) {
+    _appearance.hair = c;
     updateAppearanceForAll(true);
 }
 
 
-void Character::getHairColor(uint8_t &red, uint8_t &green, uint8_t &blue) const {
-    red = _appearance.hair.red;
-    green = _appearance.hair.green;
-    blue = _appearance.hair.blue;
+Colour Character::getHairColour() const {
+    return _appearance.hair;
 }
 
 
 void Character::setHair(uint8_t hairID) {
-    _appearance.hairtype = hairID;
-    updateAppearanceForAll(true);
+    if (raceTypes->isHairAvailable(race, getAttribute(sex), hairID)) {
+        _appearance.hairtype = hairID;
+        updateAppearanceForAll(true);
+    } else {
+        Logger::error(LogFacility::Script) << "Race " << race << " subtype "
+                << getAttribute(sex) << " has no hair with id "
+                << int(hairID) << ". Leaving hair unchanged at "
+                << int(_appearance.hairtype) << "." << Log::end;
+    }
 }
 
 
@@ -756,8 +757,15 @@ uint8_t Character::getHair() const {
 
 
 void Character::setBeard(uint8_t beardID) {
-    _appearance.beardtype = beardID;
-    updateAppearanceForAll(true);
+    if (raceTypes->isBeardAvailable(race, getAttribute(sex), beardID)) {
+        _appearance.beardtype = beardID;
+        updateAppearanceForAll(true);
+    } else {
+        Logger::error(LogFacility::Script) << "Race " << race << " subtype "
+                << getAttribute(sex) << " has no beard with id "
+                << int(beardID) << ". Leaving beard unchanged at "
+                << int(_appearance.beardtype) << "." << Log::end;
+    }
 }
 
 
@@ -834,7 +842,7 @@ Attribute::attribute_t Character::increaseAttribute(Character::attributeIndex at
 }
 
 bool Character::isBaseAttributeValid(Character::attributeIndex attribute, Attribute::attribute_t value) const {
-    return Data::RaceAttributes.isBaseAttributeInLimits(getRace(), attribute, value);
+    return Data::Races.isBaseAttributeInLimits(getRace(), attribute, value);
 }
 
 uint16_t Character::getBaseAttributeSum() const {
@@ -849,7 +857,7 @@ uint16_t Character::getBaseAttributeSum() const {
 }
 
 uint16_t Character::getMaxAttributePoints() const {
-    return Data::RaceAttributes.getMaxAttributePoints(getRace());
+    return Data::Races.getMaxAttributePoints(getRace());
 }
 
 bool Character::saveBaseAttributes() {
@@ -1195,7 +1203,7 @@ int Character::weightContainer(TYPE_OF_ITEM_ID id, int count, Container *tcont) 
     }
 }
 
-Character::movement_type Character::GetMovement() const {
+movement_type Character::GetMovement() const {
     return _movement;
 }
 
@@ -1377,7 +1385,7 @@ TYPE_OF_WALKINGCOST Character::getMoveTime(const Field &targetField, bool diagon
     TYPE_OF_WALKINGCOST walkcost;
 
     switch (_movement) {
-    case fly:
+    case movement_type::fly:
         walkcost = NP_STANDARDFLYCOST;
         break;
 
@@ -1680,3 +1688,7 @@ void Character::setMagicFlags(magic_type type, uint64_t flags) {
 std::ostream &operator<<(std::ostream &os, const Character &character) {
     return os << character.to_string();
 };
+
+const MonsterStruct::loottype &Character::getLoot() const {
+    throw NoLootFound();
+}

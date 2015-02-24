@@ -25,34 +25,13 @@
 #include "data/StructTable.hpp"
 #include "types.hpp"
 
-struct RaceAttributeStruct {
-    uint16_t minSize = 100;
-    uint16_t maxSize = 100;
-    uint8_t minAgility = 2;
-    uint8_t maxAgility = 20;
-    uint8_t minConstitution = 2;
-    uint8_t maxConstitution = 20;
-    uint8_t minDexterity = 2;
-    uint8_t maxDexterity = 20;
-    uint8_t minEssence = 2;
-    uint8_t maxEssence = 20;
-    uint8_t minIntelligence = 2;
-    uint8_t maxIntelligence = 20;
-    uint8_t minPerception = 2;
-    uint8_t maxPerception = 20;
-    uint8_t minStrength = 2;
-    uint8_t maxStrength = 20;
-    uint8_t minWillpower = 2;
-    uint8_t maxWillpower = 20;
-    uint8_t maxAttribs = 84;
-};
 
-class RaceAttributeTable : public StructTable<uint16_t, RaceAttributeStruct> {
+class RaceTable : public StructTable<uint16_t, RaceStruct> {
 public:
     virtual std::string getTableName() override;
     virtual std::vector<std::string> getColumnNames() override;
     virtual uint16_t assignId(const Database::ResultTuple &row) override;
-    virtual RaceAttributeStruct assignTable(const Database::ResultTuple &row) override;
+    virtual RaceStruct assignTable(const Database::ResultTuple &row) override;
     uint8_t getRelativeSize(TYPE_OF_RACE_ID race, uint16_t size) const;
     bool isBaseAttributeInLimits(TYPE_OF_RACE_ID race, Character::attributeIndex attribute, Attribute::attribute_t value) const;
     uint8_t getMaxAttributePoints(TYPE_OF_RACE_ID race) const;

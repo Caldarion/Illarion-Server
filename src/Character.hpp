@@ -27,6 +27,11 @@
 #include <map>
 #include <unordered_map>
 #include "constants.hpp"
+#include "dialog/CraftingDialog.hpp"
+#include "dialog/InputDialog.hpp"
+#include "dialog/MerchantDialog.hpp"
+#include "dialog/MessageDialog.hpp"
+#include "dialog/SelectionDialog.hpp"
 #include "tuningConstants.hpp"
 #include "LongTimeCharacterEffects.hpp"
 #include "WaypointList.hpp"
@@ -34,15 +39,11 @@
 #include "Attribute.hpp"
 #include "Item.hpp"
 #include "ItemLookAt.hpp"
+#include "TableStructs.hpp"
 
 class World;
 class Container;
 class Field;
-class InputDialog;
-class MessageDialog;
-class MerchantDialog;
-class SelectionDialog;
-class CraftingDialog;
 class Player;
 
 enum magic_type {
@@ -52,6 +53,8 @@ enum magic_type {
     DRUID=3
 };
 
+class NoLootFound: public std::exception {};
+
 class Character {
     Character(const Character &) = delete;
     Character &operator=(const Character &) = delete;
@@ -59,14 +62,10 @@ class Character {
 public:
     struct appearance {
 
-        struct color {
-            uint8_t red, green, blue;
-        };
-
         uint8_t hairtype = 0;
         uint8_t beardtype = 0;
-        color hair = { 255, 255, 255 };
-        color skin = { 255, 255, 255 };
+        Colour hair;
+        Colour skin;
 
         appearance() {};
     };
@@ -140,12 +139,6 @@ public:
     struct skillvalue {
         unsigned short int major = 0;
         unsigned short int minor = 0;
-    };
-
-    enum movement_type {
-        walk = 0,
-        fly = 1,
-        crawl = 2
     };
 
     struct s_magic {
@@ -333,10 +326,10 @@ public:
     virtual const skillvalue *getSkillValue(TYPE_OF_SKILL_ID s) const;
     virtual unsigned short int getMinorSkill(TYPE_OF_SKILL_ID s) const;
 
-    void setSkinColor(uint8_t red, uint8_t green, uint8_t blue);
-    void getSkinColor(uint8_t &red, uint8_t &green, uint8_t &blue) const;
-    void setHairColor(uint8_t red, uint8_t green, uint8_t blue);
-    void getHairColor(uint8_t &red, uint8_t &green, uint8_t &blue) const;
+    void setSkinColour(const Colour &c);
+    Colour getSkinColour() const;
+    void setHairColour(const Colour &c);
+    Colour getHairColour() const;
     void setHair(uint8_t hairID);
     uint8_t getHair() const;
     void setBeard(uint8_t beardID);
@@ -507,6 +500,8 @@ public:
 
     virtual void logAdmin(const std::string &message);
 
+    virtual const MonsterStruct::loottype &getLoot() const;
+
 protected:
     struct RaceStruct {
         std::string racename;
@@ -557,7 +552,7 @@ protected:
 private:
     TYPE_OF_CHARACTER_ID id;
     std::string name;
-    movement_type _movement = walk;
+    movement_type _movement = movement_type::walk;
     std::vector<Attribute> attributes;
     bool alive = true;
     short int actionPoints = NP_MAX_AP;

@@ -60,7 +60,7 @@
 #include "Statistics.hpp"
 
 extern ScheduledScriptsTable *scheduledScripts;
-extern MonsterTable *MonsterDescriptions;
+extern MonsterTable *monsterDescriptions;
 extern std::shared_ptr<LuaLogoutScript> logoutScript;
 extern std::shared_ptr<LuaWeaponScript> standardFightingScript;
 
@@ -331,10 +331,6 @@ bool World::initRespawns() {
 
 }
 
-bool World::getMonsterDefinition(TYPE_OF_CHARACTER_ID type, MonsterStruct &definition) {
-    return MonsterDescriptions->find(type, definition);
-}
-
 void World::checkMonsters() {
     if (monstertimer.next()) {
         if (isSpawnEnabled()) {
@@ -360,8 +356,8 @@ void World::checkMonsters() {
             monster.increaseFightPoints(ap);
             monster.effects.checkEffects();
 
-            MonsterStruct monStruct;
-            bool foundMonster = MonsterDescriptions->find(monster.getMonsterType(), monStruct) ;
+            bool foundMonster = monsterDescriptions->exists(monster.getMonsterType());
+            const auto &monStruct = (*monsterDescriptions)[monster.getMonsterType()];
 
             if (monster.canAct()) {
                 if (!monster.getOnRoute()) {
@@ -453,9 +449,8 @@ void World::checkMonsters() {
                         if (makeRandomStep) {
                             int tempr = Random::uniform(1, 25);
 
-                            MonsterStruct monsterdef;
-
-                            bool hasDefinition = MonsterDescriptions->find(monster.getMonsterType() , monsterdef);
+                            bool hasDefinition = monsterDescriptions->exists(monster.getMonsterType());
+                            const auto &monsterdef = (*monsterDescriptions)[monster.getMonsterType()];
 
                             if (!hasDefinition) {
                                 Logger::error(LogFacility::World) << "Data for Healing not Found for monsterrace: " << monster.getMonsterType() << Log::end;
@@ -616,8 +611,9 @@ void World::checkMonsters() {
 
         sendCharacterMoveToAllVisiblePlayers(monster, NORMALMOVE, 4);
 
-        MonsterStruct monStruct;
-        bool foundMonster = MonsterDescriptions->find(monster->getMonsterType(), monStruct) ;
+        const auto monsterType = monster->getMonsterType();
+        bool foundMonster = monsterDescriptions->exists(monsterType);
+        const auto &monStruct = (*monsterDescriptions)[monsterType];
 
         if (foundMonster && monStruct.script) {
             monStruct.script->onSpawn(monster);

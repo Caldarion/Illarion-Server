@@ -45,7 +45,7 @@
 
 #include "script/LuaWeaponScript.hpp"
 
-extern MonsterTable *MonsterDescriptions;
+extern MonsterTable *monsterDescriptions;
 extern std::shared_ptr<LuaWeaponScript> standardFightingScript;
 
 void World::deleteAllLostNPC() {
@@ -420,9 +420,11 @@ bool World::characterAttacks(Character *cp) {
 
             if (temppl != nullptr) {
                 if (cp->isInRange(temppl, temppl->getScreenRange())) {
-                    MonsterStruct monStruct;
+                    const auto monsterType = temppl->getMonsterType();
 
-                    if (MonsterDescriptions->find(temppl->getMonsterType(), monStruct)) {
+                    if (monsterDescriptions->exists(monsterType)) {
+                        const auto &monStruct = (*monsterDescriptions)[monsterType];
+
                         if (monStruct.script) {
                             monStruct.script->onAttacked(temppl,cp);
                         }

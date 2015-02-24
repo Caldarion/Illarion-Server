@@ -34,8 +34,8 @@ BUILT_SOURCES = version.hpp
 libserver_a_SOURCES = \
 main_help.cpp utility.cpp Logger.cpp Random.cpp Config.cpp Statistics.cpp a_star.cpp character_ptr.cpp \
 \
-data/Data.cpp data/QuestNodeTable.cpp data/QuestTable.cpp \
-data/ArmorObjectTable.cpp data/CommonObjectTable.cpp data/ContainerObjectTable.cpp data/RaceAttributeTable.cpp \
+data/Data.cpp data/QuestNodeTable.cpp data/QuestTable.cpp data/RaceTypeTable.cpp \
+data/ArmorObjectTable.cpp data/CommonObjectTable.cpp data/ContainerObjectTable.cpp data/RaceTable.cpp \
 data/MonsterAttackTable.cpp data/ScheduledScriptsTable.cpp data/LongTimeEffectTable.cpp data/NaturalArmorTable.cpp \
 data/SpellTable.cpp data/ScriptVariablesTable.cpp data/NPCTable.cpp data/TriggerTable.cpp \
 data/MonsterTable.cpp data/TilesModificatorTable.cpp data/TilesTable.cpp data/SkillTable.cpp data/WeaponObjectTable.cpp \
@@ -86,14 +86,14 @@ noinst_HEADERS = Showcase.hpp Container.hpp dialog/Dialog.hpp \
 		 MonitoringClients.hpp Field.hpp \
 		 data/Data.hpp data/Table.hpp data/StructTable.hpp \
 		 data/ScriptStructTable.hpp data/QuestScriptStructTable.hpp \
-		 data/SpellTable.hpp \
+		 data/SpellTable.hpp data/RaceTypeTable.hpp \
 		 data/QuestNodeTable.hpp data/TriggerTable.hpp \
 		 data/CommonObjectTable.hpp data/ContainerObjectTable.hpp \
 		 data/QuestTable.hpp data/MonsterAttackTable.hpp \
 		 data/SkillTable.hpp data/ArmorObjectTable.hpp \
 		 data/MonsterTable.hpp data/ScriptVariablesTable.hpp \
 		 data/NPCTable.hpp data/LongTimeEffectTable.hpp \
-		 data/TilesModificatorTable.hpp data/RaceAttributeTable.hpp \
+		 data/TilesModificatorTable.hpp data/RaceTable.hpp \
 		 data/ScheduledScriptsTable.hpp data/TilesTable.hpp \
 		 data/Table.hpp data/WeaponObjectTable.hpp \
 		 data/NaturalArmorTable.hpp main_help.hpp TableStructs.hpp \

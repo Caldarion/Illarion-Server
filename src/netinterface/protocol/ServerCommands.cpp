@@ -271,16 +271,12 @@ AppearanceTC::AppearanceTC(Character *cc, const Player *receivingPlayer) : Basic
     addShortIntToBuffer(cc->getRace());
     addUnsignedCharToBuffer(cc->getAttribute(Character::sex));
     addShortIntToBuffer(cc->getAttribute(Character::hitpoints));
-    addUnsignedCharToBuffer(Data::RaceAttributes.getRelativeSize(cc->getRace(), cc->getAttribute(Character::height)));
+    addUnsignedCharToBuffer(Data::Races.getRelativeSize(cc->getRace(), cc->getAttribute(Character::height)));
     const Character::appearance appearance = cc->getAppearance();
     addUnsignedCharToBuffer(appearance.hairtype);
     addUnsignedCharToBuffer(appearance.beardtype);
-    addUnsignedCharToBuffer(appearance.hair.red);
-    addUnsignedCharToBuffer(appearance.hair.green);
-    addUnsignedCharToBuffer(appearance.hair.blue);
-    addUnsignedCharToBuffer(appearance.skin.red);
-    addUnsignedCharToBuffer(appearance.skin.green);
-    addUnsignedCharToBuffer(appearance.skin.blue);
+    addColourToBuffer(appearance.hair);
+    addColourToBuffer(appearance.skin);
 
     for (unsigned char i = 0; i < MAX_BODY_ITEMS + MAX_BELT_SLOTS; ++i) {
         addShortIntToBuffer(cc->GetItemAt(i).getId());
@@ -370,11 +366,11 @@ LookAtDialogItemTC::LookAtDialogItemTC(unsigned int dialogId, uint8_t itemIndex,
     addItemLookAt(this, lookAt);
 }
 
-LookAtCraftingDialogIngredientTC::LookAtCraftingDialogIngredientTC(unsigned int dialogId, uint8_t itemIndex, uint8_t ingredientIndex, const ItemLookAt &lookAt) : BasicServerCommand(SC_LOOKATDIALOGITEM_TC) {
+LookAtDialogGroupItemTC::LookAtDialogGroupItemTC(unsigned int dialogId, uint8_t groupIndex, uint8_t itemIndex, const ItemLookAt &lookAt) : BasicServerCommand(SC_LOOKATDIALOGITEM_TC) {
     addIntToBuffer(dialogId);
     addUnsignedCharToBuffer(1);
+    addUnsignedCharToBuffer(groupIndex);
     addUnsignedCharToBuffer(itemIndex);
-    addUnsignedCharToBuffer(ingredientIndex);
     addItemLookAt(this, lookAt);
 }
 

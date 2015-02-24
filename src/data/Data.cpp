@@ -30,7 +30,7 @@ namespace Data {
 ScriptVariablesTable ScriptVariables;
 SkillTable Skills;
 QuestTable Quests;
-RaceAttributeTable RaceAttributes;
+RaceTable Races;
 NaturalArmorTable NaturalArmors;
 MonsterAttackTable MonsterAttacks;
 CommonObjectTable CommonItems;
@@ -47,7 +47,7 @@ std::vector<Table *> getTables() {
     return {
         &ScriptVariables,
         &Quests,
-        &RaceAttributes,
+        &Races,
         &NaturalArmors,
         &MonsterAttacks,
         &CommonItems,
@@ -66,11 +66,6 @@ bool reloadTables() {
     bool success = true;
 
     Logger::notice(LogFacility::Script) << "Loading data and scripts ..." << Log::end;
-
-    std::string preReloadCommand = "sh " + Config::instance().datadir() + "pre-reload 2>/dev/null >/dev/null";
-    if (!system(preReloadCommand.c_str())) {
-        Logger::info(LogFacility::Other) << "Error calling pre-reload hook." << Log::end;
-    }
 
     for (auto &table : getTables()) {
         success = success && table->reloadBuffer();
@@ -103,6 +98,14 @@ bool reload() {
     }
 
     return false;
+}
+
+void preReload() {
+    std::string preReloadCommand = "sh " + Config::instance().datadir() + "pre-reload 2>/dev/null >/dev/null";
+
+    if (!system(preReloadCommand.c_str())) {
+        Logger::info(LogFacility::Other) << "Error calling pre-reload hook." << Log::end;
+    }
 }
 
 }

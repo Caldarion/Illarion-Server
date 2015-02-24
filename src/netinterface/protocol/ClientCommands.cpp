@@ -45,7 +45,7 @@
 #include "netinterface/protocol/ServerCommands.hpp"
 #include "netinterface/protocol/BBIWIServerCommands.hpp"
 
-extern MonsterTable *MonsterDescriptions;
+extern MonsterTable *monsterDescriptions;
 extern std::shared_ptr<LuaLookAtPlayerScript>lookAtPlayerScript;
 
 InputDialogTS::InputDialogTS() : BasicClientCommand(C_INPUTDIALOG_TS) {
@@ -105,6 +105,11 @@ void MerchantDialogTS::decodeData() {
         purchaseIndex = getUnsignedCharFromBuffer();
         purchaseAmount = getShortIntFromBuffer();
         break;
+
+    case 3:
+        lookAtList = getUnsignedCharFromBuffer();
+        lookAtSlot = getUnsignedCharFromBuffer();
+        break;
     }
 }
 
@@ -122,6 +127,10 @@ void MerchantDialogTS::performAction(Player *player) {
 
     case 2:
         player->executeMerchantDialogBuy(dialogId, purchaseIndex, purchaseAmount);
+        break;
+
+    case 3:
+        player->executeMerchantDialogLookAt(dialogId, lookAtList, lookAtSlot);
         break;
     }
 }
@@ -257,9 +266,11 @@ void LookAtCharacterTS::performAction(Player *player) {
         Monster *monster = World::get()->Monsters.find(id);
 
         if (monster) {
-            MonsterStruct mon;
+            const auto monsterType = monster->getMonsterType();
 
-            if (MonsterDescriptions->find(monster->getMonsterType(), mon)) {
+            if (monsterDescriptions->exists(monsterType)) {
+                const auto &mon = (*monsterDescriptions)[monsterType];
+
                 if (mon.script && mon.script->existsEntrypoint("lookAtMonster")) {
                     mon.script->lookAtMonster(player, monster, mode);
                     return;
@@ -594,10 +605,12 @@ void CastTS::performAction(Player *player) {
                 LuaMageScript->CastMagicOnCharacter(player, Target.character, static_cast<unsigned char>(LTS_NOLTACTION));
 
                 if (Target.character->getType() == Character::monster) {
-                    MonsterStruct monStruct;
                     Monster *temp = dynamic_cast<Monster *>(Target.character);
+                    const auto monsterType = temp->getMonsterType();
 
-                    if (MonsterDescriptions->find(temp->getMonsterType(), monStruct)) {
+                    if (monsterDescriptions->exists(monsterType)) {
+                        const auto &monStruct = (*monsterDescriptions)[monsterType];
+
                         if (monStruct.script) {
                             monStruct.script->onCasted(temp,player);
                         }
@@ -695,10 +708,10 @@ void UseTS::performAction(Player *player) {
                         Logger::debug(LogFacility::Script) << "Character is a monster!" << Log::end;
 
                         Monster *scriptMonster = dynamic_cast<Monster *>(tmpCharacter);
-                        MonsterStruct monStruct;
+                        const auto monsterType = scriptMonster->getMonsterType();
 
-                        if (MonsterDescriptions->find(scriptMonster->getMonsterType(),monStruct)) {
-                            LuaMonsterScript = monStruct.script;
+                        if (monsterDescriptions->exists(monsterType)) {
+                            LuaMonsterScript = (*monsterDescriptions)[monsterType].script;
                         } else {
                             Logger::error(LogFacility::Script) << "try to use Monster but id: " << scriptMonster->getMonsterType() << " not found in database!" << Log::end;
                         }

@@ -114,6 +114,53 @@ int create_item(Character *character, Item::id_type id, Item::number_type number
     return character->createItem(id, number, quality, convert_to_map(data).get());
 }
 
+luabind::object getLoot(const Character *character) {
+    lua_State *_luaState = World::get()->getCurrentScript()->getLuaState();
+    luabind::object lootTable = luabind::newtable(_luaState);
+
+    try {
+        const auto &loot = character->getLoot();
+
+        for (const auto &category: loot) {
+            const auto categoryId = category.first;
+            const auto &categoryItems = category.second;
+
+            luabind::object lootTableCategory = luabind::newtable(_luaState);
+
+            for (const auto &item: categoryItems) {
+                const auto lootId = item.first;
+                const auto &lootItem = item.second;
+                //auto &lootTableItem = lootTable[categoryId][lootId];
+
+                //probability, itemId, minAmount, maxAmount, minQuality, maxQuality, minDurability, maxDurability
+                luabind::object lootTableItem = luabind::newtable(_luaState);
+                lootTableItem["probability"] = lootItem.probability;
+                lootTableItem["itemId"] = lootItem.itemId;
+                lootTableItem["minAmount"] = lootItem.amount.first;
+                lootTableItem["maxAmount"] = lootItem.amount.second;
+                lootTableItem["minQuality"] = lootItem.quality.first;
+                lootTableItem["maxQuality"] = lootItem.quality.second;
+                lootTableItem["minDurability"] = lootItem.durability.first;
+                lootTableItem["maxDurability"] = lootItem.durability.second;
+
+                luabind::object lootTableItemData = luabind::newtable(_luaState);
+                
+                for (const auto &data: lootItem.data) {
+                    lootTableItemData[data.first] = data.second;
+                }
+
+                lootTableItem["data"] = lootTableItemData;
+                lootTableCategory[lootId] = lootTableItem;
+            }
+
+            lootTable[categoryId] = lootTableCategory;
+        }
+    } catch (NoLootFound &) {
+    }
+
+    return lootTable;
+}
+
 int container_count_item1(Container *container, Item::id_type id) {
     return container->countItem(id);
 }
@@ -196,17 +243,17 @@ luabind::object world_LuaLoS(const World *world, const position &startingpos, co
     lua_State *luaState = world->getCurrentScript()->getLuaState();
     luabind::object list = luabind::newtable(luaState);
     int index = 1;
-    std::list<BlockingObject> objects = world->LoS(startingpos, endingpos);
+    auto objects = world->LoS(startingpos, endingpos);
 
-    for (std::list<BlockingObject>::iterator boIterator = objects.begin(); boIterator != objects.end(); ++boIterator) {
+    for (auto &blocker: objects) {
         luabind::object innerlist = luabind::newtable(luaState);
 
-        if (boIterator->blockingType == BlockingObject::BT_CHARACTER) {
+        if (blocker.blockingType == BlockingObject::BT_CHARACTER) {
             innerlist["TYPE"] = "CHARACTER";
-            innerlist["OBJECT"] = character_ptr(boIterator->blockingChar);
-        } else if (boIterator->blockingType == BlockingObject::BT_ITEM) {
+            innerlist["OBJECT"] = character_ptr(blocker.blockingChar);
+        } else if (blocker.blockingType == BlockingObject::BT_ITEM) {
             innerlist["TYPE"] = "ITEM";
-            innerlist["OBJECT"] = boIterator->blockingItem;
+            innerlist["OBJECT"] = blocker.blockingItem;
         }
 
         list[index] = innerlist;

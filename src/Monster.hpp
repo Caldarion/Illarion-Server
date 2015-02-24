@@ -20,6 +20,7 @@
 #ifndef MONSTER_HPP
 #define MONSTER_HPP
 
+#include "data/MonsterTable.hpp"
 #include "Character.hpp"
 
 class SpawnPoint;
@@ -45,6 +46,8 @@ public:
     */
     Monster(const TYPE_OF_CHARACTER_ID &type, const position &newpos, SpawnPoint *spawnpoint=0);
 
+    virtual const MonsterStruct::loottype &getLoot() const override;
+
     virtual unsigned short getType() const override {
         return monster;
     }
@@ -55,7 +58,7 @@ public:
     * @param type the new type of the monster
     * @throw unknownIDException
     */
-    void setMonsterType(const TYPE_OF_CHARACTER_ID &type);
+    void setMonsterType(TYPE_OF_CHARACTER_ID type);
 
     /**
     * sets the spawnpoint for thins monster to a new one
@@ -132,10 +135,13 @@ public:
 
     std::string nameDe;
 
+protected:
+    Monster() {};
+
 private:
 
     static uint32_t counter;
-    SpawnPoint *spawn;
+    SpawnPoint *spawn = nullptr;
     TYPE_OF_CHARACTER_ID monstertype;
     bool _canAttack;
 };

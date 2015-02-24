@@ -30,46 +30,23 @@ extern "C" {
 #include <cxxabi.h>
 
 #include "luabind/luabind.hpp"
-#include "luabind/operator.hpp"
-#include <luabind/adopt_policy.hpp>
-#include "luabind/out_value_policy.hpp"
 #include <luabind/raw_policy.hpp>
 
 #include <boost/algorithm/string.hpp>
 
-#include "Character.hpp"
 #include "Monster.hpp"
 #include "NPC.hpp"
-#include "Field.hpp"
-#include "Item.hpp"
 #include "Player.hpp"
 #include "World.hpp"
-#include "globals.hpp"
-#include "TableStructs.hpp"
-#include "Container.hpp"
-#include "LongTimeAction.hpp"
-#include "LongTimeEffect.hpp"
-#include "LongTimeCharacterEffects.hpp"
 #include "Logger.hpp"
-#include "WaypointList.hpp"
-#include "character_ptr.hpp"
-#include "Random.hpp"
 #include "Config.hpp"
 
-#include "data/ScriptVariablesTable.hpp"
 #include "data/Data.hpp"
 
-#include "dialog/InputDialog.hpp"
-#include "dialog/MessageDialog.hpp"
-#include "dialog/MerchantDialog.hpp"
-#include "dialog/SelectionDialog.hpp"
-#include "dialog/CraftingDialog.hpp"
-
 #include "script/forwarder.hpp"
+#include "script/binding/binding.hpp"
 
-extern ScriptVariablesTable *scriptVariables;
-
-lua_State *LuaScript::_luaState = 0;
+lua_State *LuaScript::L = 0;
 bool LuaScript::initialized = false;
 
 LuaScript::LuaScript() {
@@ -82,7 +59,6 @@ LuaScript::LuaScript(std::string filename) {
     initialize();
 
     _filename = filename;
-    boost::split(vecPath, filename, boost::is_any_of("."));
 
     strcpy(luafile, Config::instance().scriptdir().c_str());
     std::replace(filename.begin(), filename.end(), '.', '/');
@@ -94,56 +70,23 @@ LuaScript::LuaScript(std::string filename) {
 LuaScript::LuaScript(const std::string &code, const std::string &scriptname) {
     initialize();
 
-    int err = luaL_loadbuffer(_luaState, code.c_str(), code.length(), scriptname.c_str());
+    luaL_getsubtable(L, LUA_REGISTRYINDEX, "_LOADED");
 
-    if (err != 0) {
-        std::string errstr(luafile);
+    int errorCode = luaL_loadbuffer(L, code.c_str(), code.length(), scriptname.c_str());
+    handleLuaLoadError(errorCode);
 
-        switch (err) {
-        case LUA_ERRFILE:
-            throw ScriptException("Could not access script file: " + errstr);
-            break;
+    errorCode = lua_pcall(L, 0, LUA_MULTRET, 0);
+    handleLuaCallError(errorCode);
 
-        case LUA_ERRSYNTAX:
-            throw ScriptException("Syntax error in script file: " + errstr);
-            break;
-
-        case LUA_ERRMEM:
-            throw ScriptException("Insufficient memory for loading script file: " + errstr);
-            break;
-
-        default:
-            throw ScriptException("Could not load script file: " + errstr);
-            break;
-        }
-    }
-
-    err = lua_pcall(_luaState, 0, LUA_MULTRET, 0);
-
-    if (err != 0) {
-        std::string errstr(luafile);
-
-        switch (err) {
-        case LUA_ERRRUN:
-            writeErrorMsg();
-            break;
-
-        case LUA_ERRMEM:
-            throw ScriptException("Insufficient memory for running script file: " + errstr);
-            break;
-
-        default:
-            throw ScriptException("Could not load script file: " + errstr);
-            break;
-        }
-    }
+    lua_setfield(L, -2, _filename.c_str());
+    lua_pop(L, 1);
 }
 
 void LuaScript::initialize() {
     if (!initialized) {
         initialized = true;
-        _luaState = luaL_newstate();
-        luabind::open(_luaState);
+        L = luaL_newstate();
+        luabind::open(L);
 
         // use another error function to surpress errors from
         // non-existant entry points and to display a backtrace
@@ -155,57 +98,83 @@ void LuaScript::initialize() {
         strcpy(path, Config::instance().scriptdir().c_str());
         strcat(path, "?.lua");
 
-        lua_pushglobaltable(_luaState);
-        lua_pushstring(_luaState, "package");
-        lua_gettable(_luaState, -2);
+        lua_pushglobaltable(L);
+        lua_pushstring(L, "package");
+        lua_gettable(L, -2);
         
-        lua_pushstring(_luaState, "path");
-        lua_pushstring(_luaState, path);
-        lua_settable(_luaState, -3);
+        lua_pushstring(L, "path");
+        lua_pushstring(L, path);
+        lua_settable(L, -3);
     }
 }
 
 void LuaScript::loadIntoLuaState() {
-    int err = luaL_loadfile(_luaState, luafile);
+    luaL_getsubtable(L, LUA_REGISTRYINDEX, "_LOADED");
 
-    if (err != 0) {
-        std::string errstr(luafile);
+    // if loaded already, do nothing
+    lua_getfield(L, -1, _filename.c_str());
+    if (lua_toboolean(L, -1)) {
+        lua_pop(L, 1);
+        return;
+    }
 
-        switch (err) {
+    // remove result of lua_getfield
+    lua_pop(L, 1);
+
+    // load file onto stack
+    int errorCode = luaL_loadfile(L, luafile);
+    handleLuaLoadError(errorCode);
+    if (errorCode) return;
+
+    // execute loaded file
+    errorCode = lua_pcall(L, 0, 1, 0);
+    handleLuaCallError(errorCode);
+    if (errorCode) return;
+
+    // put returned module into _LOADED
+    lua_setfield(L, -2, _filename.c_str());
+    lua_pop(L, 1);
+}
+
+void LuaScript::handleLuaLoadError(int errorCode) {
+    if (errorCode) {
+        std::string errorFile(luafile);
+
+        switch (errorCode) {
         case LUA_ERRFILE:
-            throw ScriptException("Could not access script file: " + errstr);
+            throw ScriptException("Could not access script file: " + errorFile);
             break;
 
         case LUA_ERRSYNTAX:
-            throw ScriptException("Syntax error in script file: " + errstr);
+            throw ScriptException("Syntax error in script file: " + errorFile);
             break;
 
         case LUA_ERRMEM:
-            throw ScriptException("Insufficient memory for loading script file: " + errstr);
+            throw ScriptException("Insufficient memory for loading script file: " + errorFile);
             break;
 
         default:
-            throw ScriptException("Could not load script file: " + errstr);
+            throw ScriptException("Could not load script file: " + errorFile);
             break;
         }
     }
+}
 
-    err = lua_pcall(_luaState, 0, LUA_MULTRET, 0);
+void LuaScript::handleLuaCallError(int errorCode) {
+    if (errorCode) {
+        std::string errorFile(luafile);
 
-    if (err != 0) {
-        std::string errstr(luafile);
-
-        switch (err) {
+        switch (errorCode) {
         case LUA_ERRRUN:
             writeErrorMsg();
             break;
 
         case LUA_ERRMEM:
-            throw ScriptException("Insufficient memory for running script file: " + errstr);
+            throw ScriptException("Insufficient memory for running script file: " + errorFile);
             break;
 
         default:
-            throw ScriptException("Could not load script file: " + errstr);
+            throw ScriptException("Could not load script file: " + errorFile);
             break;
         }
     }
@@ -219,8 +188,8 @@ void LuaScript::shutdownLua() {
 
     if (initialized) {
         initialized = false;
-        lua_close(_luaState);
-        _luaState = 0;
+        lua_close(L);
+        L = 0;
     }
 }
 
@@ -258,13 +227,13 @@ int LuaScript::add_backtrace(lua_State *L) {
 }
 
 void LuaScript::triggerScriptError(const std::string &msg) {
-    lua_pushstring(_luaState, msg.c_str());
-    throw luabind::error(_luaState);
+    lua_pushstring(L, msg.c_str());
+    throw luabind::error(L);
 }
 
 void LuaScript::writeErrorMsg() {
-    const char *c_err = lua_tostring(_luaState, -1);
-    lua_pop(_luaState, 1);
+    const char *c_err = lua_tostring(L, -1);
+    lua_pop(L, 1);
 
     std::string err;
 
@@ -272,10 +241,10 @@ void LuaScript::writeErrorMsg() {
         err = c_err;
     } else {
         err = "UNKNOWN ERROR, CONTACT SERVER DEVELOPER";
-        lua_pushstring(_luaState, err.c_str());
-        add_backtrace(_luaState);
-        err = lua_tostring(_luaState, -1);
-        lua_pop(_luaState, 1);
+        lua_pushstring(L, err.c_str());
+        add_backtrace(L);
+        err = lua_tostring(L, -1);
+        lua_pop(L, 1);
     }
 
     if (err.length() > 1) {
@@ -292,10 +261,10 @@ void LuaScript::writeCastErrorMsg(const std::string &entryPoint, const luabind::
 
 void LuaScript::writeDebugMsg(const std::string &msg) {
     if (Config::instance().debug) {
-        lua_pushstring(_luaState, ("Debug Message: " + msg).c_str());
-        add_backtrace(_luaState);
-        std::string backtrace = lua_tostring(_luaState, -1);
-        lua_pop(_luaState, 1);
+        lua_pushstring(L, ("Debug Message: " + msg).c_str());
+        add_backtrace(L);
+        std::string backtrace = lua_tostring(L, -1);
+        lua_pop(L, 1);
 
         if (backtrace.length() > 0) {
             Logger::notice(LogFacility::Script) << backtrace << Log::end;
@@ -304,10 +273,10 @@ void LuaScript::writeDebugMsg(const std::string &msg) {
 }
 
 void LuaScript::writeDeprecatedMsg(const std::string &deprecatedEntity) {
-    lua_pushstring(_luaState, ("Use of DEPRECATED " + deprecatedEntity).c_str());
-    add_backtrace(_luaState);
-    std::string backtrace = lua_tostring(_luaState, -1);
-    lua_pop(_luaState, 1);
+    lua_pushstring(L, ("Use of DEPRECATED " + deprecatedEntity).c_str());
+    add_backtrace(L);
+    std::string backtrace = lua_tostring(L, -1);
+    lua_pop(L, 1);
 
     if (backtrace.length() > 0) {
         Logger::warn(LogFacility::Script) << backtrace << Log::end;
@@ -315,20 +284,13 @@ void LuaScript::writeDeprecatedMsg(const std::string &deprecatedEntity) {
 }
 
 luabind::object LuaScript::buildEntrypoint(const std::string &entrypoint) {
-    luabind::object obj = luabind::globals(_luaState);
-    std::string currentpath = "";
+    luabind::object obj = luabind::registry(L);
+    obj = obj["_LOADED"][_filename];
 
-    for (std::vector<std::string>::iterator it = vecPath.begin(); it != vecPath.end(); ++it) {
-        obj = obj[*it];
-        currentpath = currentpath + "." + *it;
-
-        if (luabind::type(obj) != LUA_TTABLE) {
-            triggerScriptError("Error while loading entrypoint '" + entrypoint
-                               + "': " + currentpath.erase(0,1)
-                               + " does not exist! Check module statement in "
-                               + _filename + "!"
-                              );
-        }
+    if (luabind::type(obj) != LUA_TTABLE) {
+        triggerScriptError(
+            "Error while loading entrypoint '" + entrypoint + "' from module " +
+            _filename + ". Check if the script returns its module as table.");
     }
 
     luabind::object callee = obj[entrypoint];
@@ -348,14 +310,11 @@ bool LuaScript::existsQuestEntrypoint(const std::string &entrypoint) const {
 }
 
 bool LuaScript::existsEntrypoint(const std::string &entrypoint) const {
-    luabind::object obj = luabind::globals(_luaState);
+    luabind::object obj = luabind::registry(L);
+    obj = obj["_LOADED"][_filename];
 
-    for (auto it = vecPath.begin(); it != vecPath.end(); ++it) {
-        obj = obj[*it];
-
-        if (luabind::type(obj) != LUA_TTABLE) {
-            return existsQuestEntrypoint(entrypoint);
-        }
+    if (luabind::type(obj) != LUA_TTABLE) {
+        return existsQuestEntrypoint(entrypoint);
     }
 
     obj = obj[entrypoint];
@@ -445,484 +404,47 @@ void LuaScript::init_base_functions() {
     const luaL_Reg *lib = lualibs;
 
     for (; lib->func; lib++) {
-        luaL_requiref(_luaState, lib->name, lib->func, 1);
-        lua_pop(_luaState, 1);  // remove lib
+        luaL_requiref(L, lib->name, lib->func, 1);
+        lua_pop(L, 1);  // remove lib
     }
 
-    luabind::value_vector skills;
 
-    for (const auto &skill : Data::Skills) {
-        skills.push_back(luabind::value(skill.second.serverName.c_str(), skill.first));
-    }
 
-    luabind::module(_luaState)
+    luabind::module(L)
     [
-        luabind::class_<InputDialog>("InputDialog")
-        .def(luabind::constructor<std::string, std::string, bool, unsigned short, luabind::object>())
-        .def("getSuccess", &InputDialog::getSuccess)
-        .def("getInput", &InputDialog::getInput),
-        luabind::class_<MessageDialog>("MessageDialog")
-        .def(luabind::constructor<std::string, std::string, luabind::object>()),
-        luabind::class_<MerchantDialog>("MerchantDialog")
-        .enum_("Result")
-        [
-            luabind::value("playerAborts",0),
-            luabind::value("playerSells",1),
-            luabind::value("playerBuys",2)
-        ]
-        .def(luabind::constructor<std::string, luabind::object>())
-        .def("addOffer", (void(MerchantDialog:: *)(TYPE_OF_ITEM_ID, const std::string &, TYPE_OF_WORTH))&MerchantDialog::addOffer)
-        .def("addOffer", (void(MerchantDialog:: *)(TYPE_OF_ITEM_ID, const std::string &, TYPE_OF_WORTH, TYPE_OF_BUY_STACK))&MerchantDialog::addOffer)
-        .def("addPrimaryRequest", &MerchantDialog::addPrimaryRequest)
-        .def("addSecondaryRequest", &MerchantDialog::addSecondaryRequest)
-        .def("getResult", &MerchantDialog::getResult)
-        .def("getPurchaseIndex", &MerchantDialog::getPurchaseIndex)
-        .def("getPurchaseAmount", &MerchantDialog::getPurchaseAmount)
-        .def("getSaleItem", &MerchantDialog::getSaleItem),
-        luabind::class_<SelectionDialog>("SelectionDialog")
-        .def(luabind::constructor<std::string, std::string, luabind::object>())
-        .def("addOption", &SelectionDialog::addOption)
-        .def("getSuccess", &SelectionDialog::getSuccess)
-        .def("getSelectedIndex", &SelectionDialog::getSelectedIndex)
-        .def("setCloseOnMove", &SelectionDialog::setCloseOnMove),
-        luabind::class_<CraftingDialog>("CraftingDialog")
-        .enum_("Result")
-        [
-            luabind::value("playerAborts", 0),
-            luabind::value("playerCrafts", 1),
-            luabind::value("playerLooksAtItem", 2),
-            luabind::value("playerLooksAtIngredient", 3),
-            luabind::value("playerCraftingComplete", 4),
-            luabind::value("playerCraftingAborted", 5)
-        ]
-        .def(luabind::constructor<std::string, uint16_t, uint16_t, luabind::object>())
-        .def("clearGroupsAndProducts", &CraftingDialog::clearGroupsAndProducts)
-        .def("addGroup", &CraftingDialog::addGroup)
-        .def("addCraftable", (void(CraftingDialog:: *)(uint8_t, uint8_t, TYPE_OF_ITEM_ID, const std::string &, uint16_t))&CraftingDialog::addCraftable)
-        .def("addCraftable", (void(CraftingDialog:: *)(uint8_t, uint8_t, TYPE_OF_ITEM_ID, const std::string &, uint16_t, uint8_t))&CraftingDialog::addCraftable)
-        .def("addCraftableIngredient", (void(CraftingDialog:: *)(TYPE_OF_ITEM_ID))&CraftingDialog::addCraftableIngredient)
-        .def("addCraftableIngredient", (void(CraftingDialog:: *)(TYPE_OF_ITEM_ID, uint8_t))&CraftingDialog::addCraftableIngredient)
-        .def("getResult", &CraftingDialog::getResult)
-        .def("getCraftableId", &CraftingDialog::getCraftableId)
-        .def("getCraftableAmount", &CraftingDialog::getCraftableAmount)
-        .def("getIngredientIndex", &CraftingDialog::getIngredientIndex),
-        luabind::class_<LongTimeAction>("Action")
-        .enum_("state")
-        [
-            luabind::value("none",0), /**< no action */
-            luabind::value("abort",1), /**< action aborted */
-            luabind::value("success",2) /**< action successed */
-        ],
-        luabind::class_<position>("position")
-        .def(luabind::constructor<>())
-        .def(luabind::constructor<short int, short int, short int>())
-        .def(luabind::const_self == luabind::const_self)
-        .def(luabind::tostring(luabind::const_self))
-        .def_readwrite("x",&position::x)
-        .def_readwrite("y",&position::y)
-        .def_readwrite("z",&position::z),
-        luabind::class_<WeatherStruct>("WeatherStruct")
-        .def(luabind::constructor<>())
-        .def(luabind::constructor<char,char,char,char,char,char,char,char>())
-        .def_readwrite("cloud_density",&WeatherStruct::cloud_density)
-        .def_readwrite("fog_density",&WeatherStruct::fog_density)
-        .def_readwrite("wind_dir",&WeatherStruct::wind_dir)
-        .def_readwrite("gust_strength",&WeatherStruct::gust_strength)
-        .def_readwrite("percipitation_strength",&WeatherStruct::percipitation_strength)
-        .def_readwrite("percipitation_type",&WeatherStruct::per_type)
-        .def_readwrite("thunderstorm", &WeatherStruct::thunderstorm)
-        .def_readwrite("temperature", &WeatherStruct::temperature),
-        luabind::class_<Character>("Character")
-        .def("isNewPlayer", &Character::isNewPlayer)
-        .def("pageGM", &Character::pageGM)
-        .def("requestInputDialog", &Character::requestInputDialog, luabind::adopt(_2))
-        .def("requestMessageDialog", &Character::requestMessageDialog, luabind::adopt(_2))
-        .def("requestMerchantDialog", &Character::requestMerchantDialog, luabind::adopt(_2))
-        .def("requestSelectionDialog", &Character::requestSelectionDialog, luabind::adopt(_2))
-        .def("requestCraftingDialog", &Character::requestCraftingDialog, luabind::adopt(_2))
-        .def("idleTime", &Character::idleTime)
-        .def("sendBook", &Character::sendBook)
-        .def("updateAppearance", &Character::forceUpdateAppearanceForAll)
-        .def("performAnimation", &Character::performAnimation)
-        .def("alterSpokenMessage", &Character::alterSpokenMessage)
-        .def("actionRunning", &Character::actionRunning)
-        .def("changeQualityAt", &Character::changeQualityAt)
-        .def("isAdmin", &Character::isAdmin)
-        .def("talk", (void(Character:: *)(Character::talk_type, const std::string &))&Character::talk)
-        .def("talk", (void(Character:: *)(Character::talk_type, const std::string &, const std::string &))&Character::talk)
-        .def("sendCharDescription", &Character::sendCharDescription)
-        .def("startAction", &Character::startAction)
-        .def("abortAction", &Character::abortAction)
-        .def("successAction", &Character::successAction)
-        .def("disturbAction", &Character::actionDisturbed)
-        .def("changeSource", (void(Character:: *)(Character *))&Character::changeSource)
-        .def("changeSource", (void(Character:: *)(const ScriptItem &))&Character::changeSource)
-        .def("changeSource", (void(Character:: *)(const position &))&Character::changeSource)
-        .def("changeSource", (void(Character:: *)(void))&Character::changeSource)
-        .def("changeTarget", (void(Character:: *)(Character *))&Character::changeTarget)
-        .def("changeTarget", (void(Character:: *)(const ScriptItem &))&Character::changeTarget)
-        .def("changeTarget", (void(Character:: *)(const position &))&Character::changeTarget)
-        .def("changeTarget", (void(Character:: *)(void))&Character::changeTarget)
-        .def("inform", inform_lua1)
-        .def("inform", inform_lua2)
-        .def("inform", inform_lua3)
-        .def("inform", inform_lua4)
-        .def("introduce", &Character::introducePlayer)
-        .def("move", &Character::move)
-        .def("turn", (void(Character:: *)(direction))&Character::turn)
-        .def("turn", (void(Character:: *)(const position &))&Character::turn)
-        .def("getNextStepDir", &Character::getNextStepDir, luabind::pure_out_value(_3))
-        .def("setRace", &Character::changeRace)
-        .def("getRace", &Character::getRace)
-        .def("getFaceTo", &Character::getFaceTo)
-        .def("getType", &Character::getType)
-        .def("createItem", create_item)
-        .def("increasePoisonValue", &Character::increasePoisonValue)
-        .def("getPoisonValue", &Character::getPoisonValue)
-        .def("setPoisonValue", &Character::setPoisonValue)
-        .def("getMentalCapacity", &Character::getMentalCapacity)
-        .def("setMentalCapacity", &Character::setMentalCapacity)
-        .def("increaseMentalCapacity", &Character::increaseMentalCapacity)
-        .def("setClippingActive", &Character::setClippingActive)
-        .def("getClippingActive", &Character::getClippingActive)
-        .def("countItem", &Character::countItem)
-        .def("countItemAt", count_item_at1)
-        .def("countItemAt", count_item_at2)
-        .def("eraseItem", erase_item1)
-        .def("eraseItem", erase_item2)
-        .def("increaseAtPos", &Character::increaseAtPos)
-        .def("swapAtPos", &Character::swapAtPos)
-        .def("createAtPos", &Character::createAtPos)
-        .def("getItemAt", &Character::GetItemAt)
-        .enum_("skills")
-        [
-            skills
-        ]
-        .def("getSkillName", &Character::getSkillName)
-        .def("getSkill", &Character::getSkill)
-        .def("getMinorSkill", &Character::getMinorSkill)
-        .def("increaseAttrib", &Character::increaseAttrib)
-        .def("setAttrib", &Character::setAttrib)
-        .def("isBaseAttributeValid", &Character::isBaseAttribValid)
-        .def("getBaseAttributeSum", &Character::getBaseAttributeSum)
-        .def("getMaxAttributePoints", &Character::getMaxAttributePoints)
-        .def("saveBaseAttributes", &Character::saveBaseAttributes)
-        .def("setBaseAttribute", &Character::setBaseAttrib)
-        .def("getBaseAttribute", &Character::getBaseAttrib)
-        .def("increaseBaseAttribute", &Character::increaseBaseAttrib)
-        .def("increaseSkill", &Character::increaseSkill)
-        .def("increaseMinorSkill", &Character::increaseMinorSkill)
-        .def("setSkill", &Character::setSkill)
-        .def("setSkinColor", &Character::setSkinColor)
-        .def("getSkinColor", &Character::getSkinColor, luabind::pure_out_value(_2) + luabind::pure_out_value(_3) + luabind::pure_out_value(_4))
-        .def("setHairColor", &Character::setHairColor)
-        .def("getHairColor", &Character::getHairColor, luabind::pure_out_value(_2) + luabind::pure_out_value(_3) + luabind::pure_out_value(_4))
-        .def("setHair", &Character::setHair)
-        .def("getHair", &Character::getHair)
-        .def("setBeard", &Character::setBeard)
-        .def("getBeard", &Character::getBeard)
-        .def("learn", &Character::learn)
-        .def("getSkillValue",&Character::getSkillValue)
-        .def("teachMagic", &Character::teachMagic)
-        .def("isInRange", &Character::isInRange)
-        .def("isInRangeToPosition", &Character::isInRangeToField)
-        .def("distanceMetric", &Character::distanceMetric)
-        .def("distanceMetricToPosition", &Character::distanceMetricToPosition)
-        .def("getMagicType", &Character::getMagicType)
-        .def("setMagicType", &Character::setMagicType)
-        .def("getMagicFlags", &Character::getMagicFlags)
-        .def("warp", &Character::Warp)
-        .def("forceWarp", &Character::forceWarp)
-        .def("startMusic", &Character::startMusic)
-        .def("defaultMusic", &Character::defaultMusic)
-        .def("callAttackScript", &Character::callAttackScript)
-        .def("getItemList", character_getItemList)
-        .property("lastSpokenText", &Character::getLastSpokenText)
-        .def("getPlayerLanguage", getPlayerLanguageLua)
-        .def("getBackPack", &Character::GetBackPack)
-        .def("getDepot", &Character::GetDepot)
-        .def("setQuestProgress", &Character::setQuestProgress)
-        .def("getQuestProgress", &Character::getQuestProgress, luabind::pure_out_value(_3))
-        .def("getOnRoute",&Character::getOnRoute)
-        .def("setOnRoute",&Character::setOnRoute)
-        .def("getMonsterType", &Character::getMonsterType)
-        .def("logAdmin", &Character::logAdmin)
-        .def_readonly("effects", &Character::effects)
-        .def_readonly("waypoints", &Character::waypoints)
-        .property("pos", &Character::getPosition)
-        .property("name", &Character::getName)
-        .property("id", &Character::getId)
-        .property("activeLanguage", &Character::getActiveLanguage, &Character::setActiveLanguage)
-        .property("movepoints", &Character::getActionPoints, &Character::setActionPoints)
-        .property("fightpoints", &Character::getFightPoints, &Character::setFightPoints)
-        .property("isinvisible", &Character::isInvisible, &Character::setInvisible)
-        .property("attackmode", &Character::getAttackMode)
-        //.def_readonly("isTarget", &Character::isTarget)
-        .enum_("body_pos")
-        [
-            luabind::value("backpack", 0),
-            luabind::value("head", 1),
-            luabind::value("neck", 2),
-            luabind::value("breast", 3),
-            luabind::value("hands", 4),
-            luabind::value("left_tool", 5),
-            luabind::value("right_tool", 6),
-            luabind::value("finger_left_hand", 7),
-            luabind::value("finger_right_hand", 8),
-            luabind::value("legs", 9),
-            luabind::value("feet", 10),
-            luabind::value("coat", 11),
-            luabind::value("belt_pos_1", 12),
-            luabind::value("belt_pos_2", 13),
-            luabind::value("belt_pos_3", 14),
-            luabind::value("belt_pos_4", 15),
-            luabind::value("belt_pos_5", 16),
-            luabind::value("belt_pos_6", 17)
-        ]
-        .enum_("magic_flags")
-        [
-            luabind::value("mage", 0),
-            luabind::value("priest", 1),
-            luabind::value("bard", 2),
-            luabind::value("druid", 3)
-        ]
-        .enum_("talk_type")
-        [
-            luabind::value("say",0),
-            luabind::value("whisper",1),
-            luabind::value("yell",2)
-        ]
-        .enum_("direction")
-        [
-            luabind::value("dir_north",0),
-            luabind::value("dir_northeast",1),
-            luabind::value("dir_east",2),
-            luabind::value("dir_southeast",3),
-            luabind::value("dir_south",4),
-            luabind::value("dir_southwest",5),
-            luabind::value("dir_west",6),
-            luabind::value("dir_northwest",7),
-            luabind::value("dir_up",8),
-            luabind::value("dir_down",9)
-        ]
-        .enum_("character_type")
-        [
-            luabind::value("player",0),
-            luabind::value("monster",1),
-            luabind::value("npc",2)
-        ]
-        .enum_("sex_type")
-        [
-            luabind::value("male",0),
-            luabind::value("female",1)
-        ]
-        .enum_("face_to")
-        [
-            luabind::value("north",0),
-            luabind::value("northeast",1),
-            luabind::value("east",2),
-            luabind::value("southeast",3),
-            luabind::value("south",4),
-            luabind::value("southwest",5),
-            luabind::value("west",6),
-            luabind::value("northwest",7)
-        ]
-        .enum_("race_type")
-        [
-            luabind::value("human",0),
-            luabind::value("dwarf",1),
-            luabind::value("halfling",2),
-            luabind::value("elf",3),
-            luabind::value("orc",4),
-            luabind::value("lizardman",5),
-            luabind::value("gnome",6),
-            luabind::value("fairy",7),
-            luabind::value("goblin",8),
-            luabind::value("troll",9),
-            luabind::value("mumie",10),
-            luabind::value("skeleton",11),
-            luabind::value("beholder",12),
-            luabind::value("cloud",13),
-            luabind::value("healer",14),
-            luabind::value("buyer",15),
-            luabind::value("seller",16),
-            luabind::value("insects",17),
-            luabind::value("sheep",18),
-            luabind::value("spider",19),
-            luabind::value("demonskeleton",20),
-            luabind::value("rotworm",21),
-            luabind::value("bigdemon",22),
-            luabind::value("scorpion",23),
-            luabind::value("pig",24),
-            luabind::value("unknown",25),
-            luabind::value("skull",26),
-            luabind::value("wasp",27),
-            luabind::value("foresttroll",28),
-            luabind::value("shadowskeleton",29),
-            luabind::value("stonegolem",30),
-            luabind::value("mgoblin",31),
-            luabind::value("gnoll",32),
-            luabind::value("dragon",33),
-            luabind::value("mdrow",34),
-            luabind::value("fdrow",35),
-            luabind::value("lesserdemon",36)
-        ]
-        .enum_("inform_type")
-        [
-            luabind::value("lowPriority",100),
-            luabind::value("mediumPriority",101),
-            luabind::value("highPriority",102)
-        ],
-        luabind::class_<Character::skillvalue>("skillvalue")
-        .def(luabind::constructor<>())
-        .def_readwrite("major",&Character::skillvalue::major)
-        .def_readwrite("minor",&Character::skillvalue::minor),
-        luabind::class_<NPC, Character>("NPC"),
-        luabind::class_<Monster, Character>("Monster"),
-        luabind::class_<WaypointList>("WaypointList")
-        .def("addFromList", &waypointlist_addFromList)
-        .def("getWaypoints",&waypointlist_getWaypoints)
-        .def("addWaypoint",&WaypointList::addWaypoint)
-        .def("clear",&WaypointList::clear),
-        luabind::class_<LongTimeCharacterEffects>("LongTimeCharacterEffects")
-        .def("addEffect",&LongTimeCharacterEffects::addEffect, luabind::adopt(_2))
-        .def("removeEffect", (bool(LongTimeCharacterEffects:: *)(uint16_t))&LongTimeCharacterEffects::removeEffect)
-        .def("removeEffect", (bool(LongTimeCharacterEffects:: *)(const std::string &))&LongTimeCharacterEffects::removeEffect)
-        .def("removeEffect", (bool(LongTimeCharacterEffects:: *)(LongTimeEffect *))&LongTimeCharacterEffects::removeEffect)
-        .def("find", (bool(LongTimeCharacterEffects:: *)(uint16_t,LongTimeEffect *&))&LongTimeCharacterEffects::find,luabind::pure_out_value(_3))
-        .def("find", (bool(LongTimeCharacterEffects:: *)(const std::string &,LongTimeEffect *&))&LongTimeCharacterEffects::find,luabind::pure_out_value(_3)),
-        luabind::class_<Field>("Field")
-        .def("tile", &Field::getTileId)
-        .def("getStackItem", &Field::getStackItem)
-        .def("countItems", &Field::itemCount)
-        .def("isPassable", &Field::isWalkable),
-        luabind::class_<ItemLookAt>("ItemLookAt")
-        .def(luabind::constructor<>())
-        .enum_("Rareness")
-        [
-            luabind::value("commonItem", ItemLookAt::commonItem),
-            luabind::value("uncommonItem", ItemLookAt::uncommonItem),
-            luabind::value("rareItem", ItemLookAt::rareItem),
-            luabind::value("epicItem", ItemLookAt::epicItem)
-        ]
-        .property("name", &ItemLookAt::getName, &ItemLookAt::setName)
-        .property("rareness", &ItemLookAt::getRareness, &ItemLookAt::setRareness)
-        .property("description", &ItemLookAt::getDescription, &ItemLookAt::setDescription)
-        .property("craftedBy", &ItemLookAt::getCraftedBy, &ItemLookAt::setCraftedBy)
-        .property("type", &ItemLookAt::getType, &ItemLookAt::setType)
-        .property("level", &ItemLookAt::getLevel, &ItemLookAt::setLevel)
-        .property("usable", &ItemLookAt::isUsable, &ItemLookAt::setUsable)
-        .property("weight", &ItemLookAt::getWeight, &ItemLookAt::setWeight)
-        .property("worth", &ItemLookAt::getWorth, &ItemLookAt::setWorth)
-        .property("qualityText", &ItemLookAt::getQualityText, &ItemLookAt::setQualityText)
-        .property("durabilityText", &ItemLookAt::getDurabilityText, &ItemLookAt::setDurabilityText)
-        .property("durabilityValue", &ItemLookAt::getDurabilityValue, &ItemLookAt::setDurabilityValue)
-        .property("diamondLevel", &ItemLookAt::getDiamondLevel, &ItemLookAt::setDiamondLevel)
-        .property("emeraldLevel", &ItemLookAt::getEmeraldLevel, &ItemLookAt::setEmeraldLevel)
-        .property("rubyLevel", &ItemLookAt::getRubyLevel, &ItemLookAt::setRubyLevel)
-        .property("sapphireLevel", &ItemLookAt::getSapphireLevel, &ItemLookAt::setSapphireLevel)
-        .property("amethystLevel", &ItemLookAt::getAmethystLevel, &ItemLookAt::setAmethystLevel)
-        .property("obsidianLevel", &ItemLookAt::getObsidianLevel, &ItemLookAt::setObsidianLevel)
-        .property("topazLevel", &ItemLookAt::getTopazLevel, &ItemLookAt::setTopazLevel)
-        .property("bonus", &ItemLookAt::getBonus, &ItemLookAt::setBonus),
-        luabind::class_<Item>("Item")
-        .def(luabind::constructor<>())
-        .def(luabind::constructor<Item::id_type, Item::number_type, Item::wear_type, Item::quality_type>())
-        .property("id", &Item::getId, &Item::setId)
-        .property("wear", &Item::getWear, &Item::setWear)
-        .property("number", &Item::getNumber, &Item::setNumber)
-        .property("quality", &Item::getQuality, &Item::setQuality)
-        .def("setData", (void(Item:: *)(const std::string &, const std::string &))&Item::setData)
-        .def("setData", (void(Item:: *)(const std::string &, int32_t))&Item::setData)
-        .def("getData", (std::string(Item:: *)(const std::string &))&Item::getData),
-        luabind::class_<ScriptItem,Item>("scriptItem")
-        .def(luabind::constructor<>())
-        .def_readonly("owner", &ScriptItem::getOwnerForLua)
-        .def_readonly("pos", &ScriptItem::pos)
-        .def("getType", &ScriptItem::getType)
-        .def_readonly("itempos", &ScriptItem::itempos)
-        .def_readonly("inside", &ScriptItem::inside)
-        .enum_("Types")
-        [
-            luabind::value("notdefined",0),
-            luabind::value("showcase1",1),
-            luabind::value("showcase2",2),
-            luabind::value("field",3),
-            luabind::value("inventory",4),
-            luabind::value("belt",5),
-            luabind::value("container",6)
-        ],
-        luabind::class_<LongTimeEffect>("LongTimeEffect")
-        .def(luabind::constructor<uint16_t, uint32_t>())
-        .def("addValue",&LongTimeEffect::addValue)
-        .def("removeValue",&LongTimeEffect::removeValue)
-        .def("findValue",&LongTimeEffect::findValue, luabind::pure_out_value(_3))
-        .property("effectId",&LongTimeEffect::getEffectId)
-        .property("effectName",&LongTimeEffect::getEffectName)
-        .property("nextCalled",&LongTimeEffect::getExecuteIn, &LongTimeEffect::setExecuteIn)
-        .property("numberCalled",&LongTimeEffect::getNumberOfCalls),
-        luabind::class_<LongTimeEffectStruct>("LongTimeEffectStruct")
-        .def(luabind::constructor<>())
-        .def_readonly("effectId",&LongTimeEffectStruct::effectid)
-        .def_readonly("effectName", &LongTimeEffectStruct::effectname)
-        .def_readonly("scriptName", &LongTimeEffectStruct::scriptname),
-        luabind::class_<Player, Character>("Player")
-        .enum_("player_language")
-        [
-            luabind::value("german", static_cast<uint32_t>(Language::german)),
-            luabind::value("english", static_cast<uint32_t>(Language::english))
-        ]
-        .enum_("quest_availability")
-        [
-            luabind::value("questAvailable", static_cast<uint32_t>(questAvailable)),
-            luabind::value("questWillBeAvailable", static_cast<uint32_t>(questWillBeAvailable)),
-            luabind::value("questNotAvailable", static_cast<uint32_t>(questNotAvailable))
-        ],
-        luabind::class_<World>("World")
-        .def("LoS", &world_LuaLoS)
-        .def("deleteNPC", &World::deleteNPC)
-        .def("createDynamicNPC", &World::createDynamicNPC)
-        .def("getPlayersOnline", &world_getPlayersOnline)
-        .def("getNPCS", &world_getNPCS)
-        .def("getCharactersInRangeOf", &world_getCharactersInRangeOf)
-        .def("getPlayersInRangeOf", &world_getPlayersInRangeOf)
-        .def("getMonstersInRangeOf", &world_getMonstersInRangeOf)
-        .def("getNPCSInRangeOf", &world_getNPCSInRangeOf)
-        .def("getArmorStruct", &World::getArmorStruct, luabind::pure_out_value(_3))
-        .def("getWeaponStruct", &World::getWeaponStruct, luabind::pure_out_value(_3))
-        .def("getNaturalArmor", &World::getNaturalArmor, luabind::pure_out_value(_3))
-        .def("getMonsterAttack", &World::getMonsterAttack, luabind::pure_out_value(_3))
-        .def("changeQuality", &World::changeQuality)
-        .def("changeItem", &World::changeItem)
-        .def("isCharacterOnField", &World::isCharacterOnField)
-        .def("getCharacterOnField", &World::getCharacterOnField)
-        .def("putItemOnMap", &World::putItemOnMap)
-        .def("putItemAlwaysOnMap", &World::putItemAlwaysOnMap)
-        .def("getField", &world_fieldAt)
-        .def("getTime", &World::getTime)
-        .def("erase", &World::erase)
-        .def("increase", &World::increase)
-        .def("swap", &World::swap)
-        .def("createItemFromId", world_createFromId)
-        .def("createItemFromItem", &World::createFromItem)
-        .def("createMonster", &World::createMonster)
-        .def("gfx", &World::gfx)
-        .def("makeSound", &World::makeSound)
-        .def("getItemStats", &World::getItemStats)
-        .def("getItemStatsFromId", &World::getItemStatsFromId)
-        .def("sendWeatherToAllPlayers", &World::sendWeatherToAllPlayers)
-        .def("setWeatherPart", &World::setWeatherPart)
-        .def("setWeather", &World::setWeather)
-        .def("isItemOnField", &World::isItemOnField)
-        .def("getItemOnField", &World::getItemOnField)
-        .def("changeTile", &World::changeTile)
-        .def("sendMapUpdate", &World::sendMapUpdate)
-        .def("getItemName", &World::getItemName)
-        .def("createSavedArea", &World::createSavedArea)
-        .def("broadcast", &World::broadcast)
-        .def("sendMonitoringMessage", &World::sendMonitoringMessage)
-        .def_readwrite("g_item", &World::g_item)
-        .def_readwrite("weather", &World::weather),
+        binding::armor_struct(),
+        binding::attack_boni(),
+        binding::character(),
+        binding::character_skillvalue(),
+        binding::colour(),
+        binding::common_struct(),
+        binding::container(),
+        binding::crafting_dialog(),
+        binding::field(),
+        binding::input_dialog(),
+        binding::item(),
+        binding::item_look_at(),
+        binding::long_time_action(),
+        binding::long_time_character_effects(),
+        binding::long_time_effect(),
+        binding::long_time_effect_struct(),
+        binding::merchant_dialog(),
+        binding::message_dialog(),
+        binding::monster(),
+        binding::monster_armor(),
+        binding::npc(),
+        binding::player(),
+        binding::position(),
+        binding::random(),
+        binding::script_item(),
+        binding::script_variables_table(),
+        binding::selection_dialog(),
+        binding::tiles_struct(),
+        binding::waypoint_list(),
+        binding::weapon_struct(),
+        binding::weather_struct(),
+        binding::world(),
+
         luabind::def("dofile", &dofile, luabind::raw(_1)),
         luabind::def("LuaAnd", LuaAnd),
         luabind::def("getCharForId",getCharForId),
@@ -932,121 +454,13 @@ void LuaScript::init_base_functions() {
         luabind::def("LuaLShift32",LuaLShift32),
         luabind::def("LuaRShift32",LuaRShift32),
         luabind::def("LuaLShift64",LuaLShift64),
-        luabind::def("LuaLShift64",LuaLShift64),
-        luabind::class_<CommonStruct>("CommonStruct")
-        .def_readonly("id", &CommonStruct::id)
-        .def_readonly("AgeingSpeed", &CommonStruct::AgeingSpeed)
-        .def_readonly("Weight", &CommonStruct::Weight)
-        .def_readonly("ObjectAfterRot", &CommonStruct::ObjectAfterRot)
-        .def_readonly("rotsInInventory", &CommonStruct::rotsInInventory)
-        .def_readonly("Brightness", &CommonStruct::Brightness)
-        .def_readonly("Worth", &CommonStruct::Worth)
-        .def_readonly("MaxStack", &CommonStruct::MaxStack)
-        .def_readonly("BuyStack", &CommonStruct::BuyStack)
-        .def_readonly("English", &CommonStruct::English)
-        .def_readonly("German", &CommonStruct::German)
-        .def_readonly("EnglishDescription", &CommonStruct::EnglishDescription)
-        .def_readonly("GermanDescription", &CommonStruct::GermanDescription)
-        .def_readonly("Rareness", &CommonStruct::Rareness),
-        luabind::class_<TilesStruct>("TilesStruct")
-        .def_readonly("flags", &TilesStruct::flags)
-        .def_readonly("German", &TilesStruct::German)
-        .def_readonly("English", &TilesStruct::English)
-        .def_readonly("walkingCost", &TilesStruct::walkingCost),
-        luabind::class_<WeaponStruct>("WeaponStruct")
-        .def(luabind::constructor<>())
-        .enum_("type")
-        [
-            luabind::value("slashing", 1),
-            luabind::value("concussion", 2),
-            luabind::value("puncture", 3),
-            luabind::value("slashingTwoHand", 4),
-            luabind::value("concussionTwoHand", 5),
-            luabind::value("punctureTwoHand", 6),
-            luabind::value("firearm", 7),
-            luabind::value("arrow", 10),
-            luabind::value("bolt", 11),
-            luabind::value("stone", 12),
-            luabind::value("stave", 13),
-            luabind::value("shield", 14)
-        ]
-        .def_readonly("Attack", &WeaponStruct::Attack)
-        .def_readonly("Defence", &WeaponStruct::Defence)
-        .def_readonly("Accuracy", &WeaponStruct::Accuracy)
-        .def_readonly("Range", &WeaponStruct::Range)
-        .def_readonly("WeaponType", &WeaponStruct::Type)
-        .def_readonly("AmmunitionType", &WeaponStruct::AmmunitionType)
-        .def_readonly("ActionPoints",&WeaponStruct::ActionPoints)
-        .def_readonly("MagicDisturbance",&WeaponStruct::MagicDisturbance)
-        .def_readonly("PoisonStrength",&WeaponStruct::PoisonStrength)
-        .def_readonly("Level", &WeaponStruct::Level),
-        luabind::class_<ArmorStruct>("ArmorStruct")
-        .def(luabind::constructor<>())
-        .enum_("type")
-        [
-            luabind::value("clothing", 0),
-            luabind::value("general", 1),
-            luabind::value("light", 2),
-            luabind::value("medium", 3),
-            luabind::value("heavy", 4),
-            luabind::value("juwellery", 5)
-        ]
-        .def_readonly("BodyParts",&ArmorStruct::BodyParts)
-        .def_readonly("PunctureArmor",&ArmorStruct::PunctureArmor)
-        .def_readonly("StrokeArmor",&ArmorStruct::StrokeArmor)
-        .def_readonly("ThrustArmor",&ArmorStruct::ThrustArmor)
-        .def_readonly("MagicDisturbance",&ArmorStruct::MagicDisturbance)
-        .def_readonly("Absorb",&ArmorStruct::Absorb)
-        .def_readonly("Stiffness",&ArmorStruct::Stiffness)
-        .def_readonly("Level", &ArmorStruct::Level)
-        .def_readonly("Type", &ArmorStruct::Type),
-        luabind::class_<MonsterArmor>("NaturalArmor")
-        .def(luabind::constructor<>())
-        .def_readonly("strokeArmor",&MonsterArmor::strokeArmor)
-        .def_readonly("thrustArmor",&MonsterArmor::thrustArmor)
-        .def_readonly("punctureArmor",&MonsterArmor::punctureArmor),
-        luabind::class_<AttackBoni>("AttackBoni")
-        .def(luabind::constructor<>())
-        .def_readonly("attackType",&AttackBoni::attackType)
-        .def_readonly("attackValue",&AttackBoni::attackValue)
-        .def_readonly("actionPointsLost",&AttackBoni::actionPointsLost),
-        luabind::class_<Container>("Container")
-        .def(luabind::constructor<TYPE_OF_ITEM_ID>())
-        .def("getSlotCount", &Container::getSlotCount)
-        .def("takeItemNr", &Container::TakeItemNr, luabind::pure_out_value(_3) + luabind::pure_out_value(_4))
-        .def("viewItemNr", &Container::viewItemNr, luabind::pure_out_value(_3) + luabind::pure_out_value(_4))
-        .def("changeQualityAt", &Container::changeQualityAt)
-        .def("insertContainer", (bool(Container:: *)(Item,Container *))&Container::InsertContainer)
-        .def("insertContainer", (bool(Container:: *)(Item,Container *,TYPE_OF_CONTAINERSLOTS))&Container::InsertContainer)
-        .def("insertItem", (bool(Container:: *)(Item,bool))&Container::InsertItem)
-        .def("insertItem", (bool(Container:: *)(Item,TYPE_OF_CONTAINERSLOTS))&Container::InsertItem)
-        .def("insertItem", (bool(Container:: *)(Item))&Container::InsertItem)
-        .def("countItem", container_count_item1)
-        .def("countItem", container_count_item2)
-        .def("eraseItem", container_erase_item1)
-        .def("eraseItem", container_erase_item2)
-        .def("increaseAtPos", &Container::increaseAtPos)
-        .def("swapAtPos", &Container::swapAtPos)
-        .def("weight", &Container::weight),
-        luabind::class_<ScriptVariablesTable>("ScriptVariables")
-        .def("find", &ScriptVariablesTable::find, luabind::pure_out_value(_3))
-        .def("set", (void(ScriptVariablesTable:: *)(const std::string &, const std::string &))&ScriptVariablesTable::set)
-        .def("set", (void(ScriptVariablesTable:: *)(const std::string &, int32_t))&ScriptVariablesTable::set)
-        .def("remove", &ScriptVariablesTable::remove)
-        .def("save" , &ScriptVariablesTable::save),
-        luabind::class_<Random>("Random")
-        .scope
-        [
-            luabind::def("uniform", (double( *)()) &Random::uniform),
-            luabind::def("uniform", (int( *)(int, int)) &Random::uniform),
-            luabind::def("normal", &Random::normal)
-        ],
+        luabind::def("LuaRShift64",LuaRShift64),
         luabind::def("isValidChar", &isValid),
         luabind::def("debug", &LuaScript::writeDebugMsg),
         luabind::def("log", log_lua)
     ];
 
-    luabind::object globals = luabind::globals(_luaState);
+    luabind::object globals = luabind::globals(L);
     globals["world"] = World::get();
     globals["ScriptVars"] = &Data::ScriptVariables;
 }
